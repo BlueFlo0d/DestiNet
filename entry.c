@@ -14,10 +14,16 @@
 #include <event2/bufferevent_ssl.h>
 #include <event2/buffer.h>
 #include <event2/dns.h>
+#include <event2/util.h>
+#include <event2/bufferevent_ssl.h>
+#include <openssl/ssl.h>
+#include <openssl/rand.h>
+
 #include "util.h"
 #define DNF_CLIENT_CONNECT 0x1
 #define VERSION_SIZE 3
 struct evdns_base *dnsbase = NULL;
+SSL_CTX *sslctx = NULL;
 typedef struct _listener_state{
         struct event_base *base;
         struct bufferevent *out_pbev;
@@ -189,6 +195,14 @@ void socket_err_callback(struct bufferevent *pbev, short events, void *arg){
         if(events&(BEV_EVENT_EOF|BEV_EVENT_ERROR)){
                 if(events&BEV_EVENT_ERROR){
                         dn_err("Client socket error.");
+                        int err = bufferevent_get_openssl_error(pbev);
+                        if(err){
+                                dn_err("SSL Error(%d)",err);
+                        }
+                        err = EVUTIL_SOCKET_ERROR();
+                        if(err){
+                                dn_err("Socket Error(%d): %s",err,evutil_socket_error_to_string(err));
+                        }
                 }
                 dn_info3("Connection closed from client.");
                 close_listener_state(ls);
@@ -197,7 +211,9 @@ void socket_err_callback(struct bufferevent *pbev, short events, void *arg){
 void listener_callback(struct evconnlistener *listener, evutil_socket_t fd,struct sockaddr *sock, int socklen, void *arg){
         dn_info4("Local client detected.");
         struct event_base *base = (struct event_base *)arg;
+        struct ssl_st *client_sslctx = SSL_new(sslctx);
         struct bufferevent *pbev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
+        //struct bufferevent *pbev = bufferevent_openssl_socket_new(base, fd, client_sslctx, BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE);
         listener_state *ls = (listener_state *)malloc(sizeof(listener_state));
         listener_state als = {base,NULL,pbev,0,""};
         *ls = als;
@@ -211,10 +227,26 @@ int entry_daemon(){
         server_addr.sin_port = htons(8888);
         struct event_base *pevb = event_base_new();
         dnsbase = evdns_base_new(pevb, 2);
+		SSL_load_error_strings();
+		SSL_library_init();
+        if (!RAND_poll())
+                return -1;
+        sslctx = SSL_CTX_new(SSLv23_server_method());
+        if (! SSL_CTX_use_certificate_chain_file(sslctx, "cert") ||
+            ! SSL_CTX_use_PrivateKey_file(sslctx, "pkey", SSL_FILETYPE_PEM)) {
+                puts("Couldn't read 'pkey' or 'cert' file.  To generate a key\n"
+                     "and self-signed certificate, run:\n"
+                     "  openssl genrsa -out pkey 2048\n"
+                     "  openssl req -new -key pkey -out cert.req\n"
+                     "  openssl x509 -req -days 365 -in cert.req -signkey pkey -out cert");
+                return -1;
+        }
+        //SSL_CTX_set_options(sslctx, SSL_OP_NO_SSLv2);
         struct evconnlistener *pevl = evconnlistener_new_bind(pevb, listener_callback, pevb, LEV_OPT_REUSEABLE|LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, 32, (struct sockaddr *)&server_addr, sizeof(struct sockaddr_in));
         event_base_dispatch(pevb);
         evconnlistener_free(pevl);
         event_base_free(pevb);
+        return 0;
 }
 void signal_handler(int sig){
         dn_err("Received signal %d. Ignoring...",sig);
@@ -222,6 +254,5 @@ void signal_handler(int sig){
 int main(){
         signal(SIGPIPE, signal_handler);
         dn_info("Starting daemon.");
-        entry_daemon();
-        return 0;
+        return entry_daemon();
 }

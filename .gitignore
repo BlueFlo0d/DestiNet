@@ -2,5 +2,7 @@
 *~
 a.out*
 *legacy*
+cert*
+pkey*
 !.gitignore
 
