@@ -4,5 +4,7 @@ a.out*
 *legacy*
 cert*
 pkey*
+scert*
+spkey*
 !.gitignore
 

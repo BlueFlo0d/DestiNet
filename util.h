@@ -1,7 +1,7 @@
 #include <stdio.h>
 #define DN_VERBOSE_1
 #define DN_VERBOSE_2
-//#define DN_VERBOSE_3
+#define DN_VERBOSE_3
 //#define DN_VERBOSE_4
 //#define DN_VERBOSE_5
 #define _dn_info(...) printf("[DestiNet Info]"__VA_ARGS__);fputc('\n',stdout)
