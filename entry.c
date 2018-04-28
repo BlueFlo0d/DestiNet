@@ -23,7 +23,7 @@
 #define DNF_CLIENT_CONNECT 0x1
 #define VERSION_SIZE 3
 struct evdns_base *dnsbase = NULL;
-char relay_hostname[] = "localhost";
+char *relay_hostname;
 int relay_port = 8880;
 SSL_CTX *sslctx = NULL;
 typedef struct _listener_state{
@@ -168,8 +168,14 @@ int entry_daemon(int port){
 void signal_handler(int sig){
         dn_err("Received signal %d. Ignoring...",sig);
 }
-int main(){
+int main(int argc,char **argv){
         signal(SIGPIPE, signal_handler);
         dn_info("Starting daemon.");
+        if(argc > 1){
+                relay_hostname = argv[1];
+        }
+        else {
+                relay_hostname = "localhost";
+        }
         return entry_daemon(8888);
 }
