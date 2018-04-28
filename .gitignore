@@ -8,5 +8,6 @@ scert*
 spkey*
 entry
 exitus
+*.dSYM
 !.gitignore
 
